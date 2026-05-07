@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "claude-monitor"
+version = "0.1.0"
+description = "claude-monitor SDK — push traces & spans to claude-monitor from Python, wandb-style."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "claude-monitor" }]
+keywords = ["llm", "agents", "observability", "tracing", "claude"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Software Development :: Libraries",
+]
+# Zero install-time dependencies — uses only the standard library so the SDK
+# can be added to any environment without dragging extras.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-cov>=4.0"]
+
+[project.urls]
+Homepage = "https://github.com/AlexWortega/claude-monitor"
+Source = "https://github.com/AlexWortega/claude-monitor"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/claude_monitor"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/claude_monitor", "README.md", "LICENSE"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
