@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "claude-monitor"
+name = "claude-monitor-sdk"
 version = "0.2.0"
 description = "claude-monitor SDK — push traces & spans to claude-monitor from Python, wandb-style."
 readme = "README.md"
