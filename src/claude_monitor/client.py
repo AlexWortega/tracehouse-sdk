@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import logging
 import os
 import platform
 import socket
@@ -17,6 +18,13 @@ import urllib.request
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Mapping, Optional
+
+# Library code follows the stdlib pattern: a single module-level logger per
+# file, namespaced under ``claude_monitor.<module>``. Users wire it up via
+# ``logging.basicConfig(level=logging.DEBUG)`` or ``logging.getLogger(
+# "claude_monitor").setLevel(logging.INFO)``. The SDK never calls
+# ``basicConfig`` itself — that's the application's job.
+_log = logging.getLogger(__name__)
 
 
 SPAN_KINDS = (
@@ -126,9 +134,19 @@ def _do_request(
     if agent_version:
         headers["X-Claude-Monitor-Agent-Version"] = agent_version
     payload = json.dumps(body).encode("utf-8") if body is not None else None
+    _log.debug(
+        "→ %s %s (body=%d bytes)", method, path, len(payload) if payload else 0
+    )
     resp = transport(method, f"{api_base}{path}", headers, payload)
     if resp.status >= 400:
-        raise ApiError(resp.status, resp.body.decode("utf-8", errors="replace"))
+        text = resp.body.decode("utf-8", errors="replace")
+        _log.warning(
+            "← %s %s %d: %s", method, path, resp.status, text[:200]
+        )
+        raise ApiError(resp.status, text)
+    _log.debug(
+        "← %s %s %d (body=%d bytes)", method, path, resp.status, len(resp.body)
+    )
     if not resp.body:
         return {}
     try:
@@ -249,6 +267,12 @@ class Run:
             raise ClaudeMonitorError(
                 f"server did not return a trace id (response: {resp!r})"
             )
+        _log.info(
+            "trace ready: id=%s session=%s%s",
+            self.trace_id,
+            self.session_id,
+            " (resumed)" if resp.get("created") is False else "",
+        )
 
     def finish(
         self,
@@ -281,6 +305,11 @@ class Run:
         if patch:
             self._request("PATCH", f"/v1/traces/{self.trace_id}", patch)
         self._closed = True
+        _log.info(
+            "trace finished: id=%s%s",
+            self.trace_id,
+            f" outcome={outcome}" if outcome else "",
+        )
 
     # ----- span helpers --------------------------------------------------- #
 
@@ -370,6 +399,7 @@ class Run:
         items = [s.to_payload() for s in spans]
         if not items:
             return
+        _log.debug("pushing %d span(s) to /v1/spans", len(items))
         self._request(
             "POST",
             "/v1/spans",

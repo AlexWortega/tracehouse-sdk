@@ -22,6 +22,22 @@ Example::
     cm.log_tool_use("Read", {"file_path": "x.py"})
     cm.log_tool_result("file contents")
     cm.finish(outcome="good", metadata={"k": "v"})
+
+Logging
+-------
+
+The SDK uses ``logging.getLogger("claude_monitor")`` (and sub-loggers
+``claude_monitor.client`` / ``claude_monitor.training``). It does not call
+``logging.basicConfig`` itself — that's the application's job. Typical
+setup::
+
+    import logging
+    logging.basicConfig(level=logging.INFO, format="%(name)s %(message)s")
+    logging.getLogger("claude_monitor").setLevel(logging.DEBUG)  # verbose HTTP
+
+INFO covers lifecycle events (run/trace created, finished, linked, pushed
+to HF, artifacts stored). DEBUG adds every HTTP request/response.
+WARNING fires for API errors and dropped metric points (NaN/Inf).
 """
 
 from .client import (

@@ -22,10 +22,13 @@ Example::
 from __future__ import annotations
 
 import datetime as _dt
+import logging
 import os
 import platform
 import uuid
 from typing import Any, Iterable, Mapping, Optional
+
+_log = logging.getLogger(__name__)
 
 from .client import (
     ClaudeMonitorError,
@@ -136,6 +139,13 @@ class TrainingRun:
             raise ClaudeMonitorError(
                 f"server did not return a run id (response: {resp!r})"
             )
+        _log.info(
+            "run ready: id=%s name=%s%s%s",
+            self.run_id,
+            self.name,
+            f" project={self.project}" if self.project else "",
+            "" if resp.get("created", True) else " (resumed)",
+        )
 
     # ----- metric ingest -------------------------------------------------- #
 
@@ -180,11 +190,23 @@ class TrainingRun:
             return
         points = self._buf
         self._buf = []
-        self._request(
+        resp = self._request(
             "POST",
             f"/v1/runs/{self.run_id}/metrics",
             {"points": points},
         )
+        ingested = resp.get("ingested", len(points))
+        dropped = resp.get("dropped", 0)
+        if dropped:
+            _log.warning(
+                "dropped %d metric point(s) (NaN/Inf or empty key) — ingested=%d",
+                dropped,
+                ingested,
+            )
+        else:
+            _log.debug(
+                "flushed %d metric point(s) (ingested=%d)", len(points), ingested
+            )
 
     # ----- linking + artifacts ------------------------------------------- #
 
@@ -198,6 +220,9 @@ class TrainingRun:
         if split is not None:
             patch["hf_dataset_split"] = split
         self._request("PATCH", f"/v1/runs/{self.run_id}", patch)
+        _log.info(
+            "linked dataset: %s%s", hf_slug, f" (split={split})" if split else ""
+        )
 
     def link_model(self, hf_repo: str, *, revision: Optional[str] = None) -> None:
         if not self.run_id:
@@ -209,6 +234,9 @@ class TrainingRun:
         if revision is not None:
             patch["hf_model_revision"] = revision
         self._request("PATCH", f"/v1/runs/{self.run_id}", patch)
+        _log.info(
+            "linked model: %s%s", hf_repo, f"@{revision}" if revision else ""
+        )
 
     def add_artifact(
         self,
@@ -228,6 +256,7 @@ class TrainingRun:
             f"/v1/runs/{self.run_id}/artifacts",
             {"name": name, "kind": kind, "data": data},
         )
+        _log.info("artifact stored: name=%s kind=%s", name, kind)
 
     # ----- model card ----------------------------------------------------- #
 
@@ -261,7 +290,14 @@ class TrainingRun:
         body: dict[str, Any] = {}
         if commit_message is not None:
             body["commit_message"] = commit_message
-        return self._request("POST", f"/v1/runs/{self.run_id}/push_model_card", body)
+        resp = self._request("POST", f"/v1/runs/{self.run_id}/push_model_card", body)
+        commit_url = resp.get("commit_url")
+        _log.info(
+            "model card pushed: repo=%s commit=%s",
+            resp.get("repo"),
+            commit_url or "(no commit_url returned)",
+        )
+        return resp
 
     # ----- finish + context manager -------------------------------------- #
 
@@ -283,6 +319,7 @@ class TrainingRun:
                 {"status": status, "ended_at": _utcnow_iso()},
             )
             self._closed = True
+            _log.info("run finished: id=%s status=%s", self.run_id, status)
 
     def __enter__(self) -> "TrainingRun":
         return self
