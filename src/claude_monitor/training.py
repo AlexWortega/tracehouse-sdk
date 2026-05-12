@@ -40,6 +40,7 @@ from .client import (
     _utcnow_iso,
     _validate_api_key,
 )
+from .system import SystemMonitor, capture_environment
 
 ALLOWED_STATUSES = ("running", "finished", "failed", "crashed", "killed")
 ALLOWED_ARTIFACT_KINDS = ("json", "text", "params")
@@ -71,6 +72,9 @@ class TrainingRun:
         transport: Optional[Transport] = None,
         auto_create: bool = True,
         flush_threshold: int = 500,
+        capture_env: bool = True,
+        system_metrics: bool = True,
+        system_metrics_interval: float = 15.0,
     ) -> None:
         self._api_key = _validate_api_key(api_key)
         self._api_base = _resolve_api_base(api_base)
@@ -94,9 +98,53 @@ class TrainingRun:
         self._auto_step = 0
         self._buf: list[dict[str, Any]] = []
         self.flush_threshold = max(1, flush_threshold)
+        self._capture_env = capture_env
+        self._system_metrics_enabled = system_metrics
+        self._system_metrics_interval = system_metrics_interval
+        self._monitor: Optional[SystemMonitor] = None
 
         if auto_create:
             self._create_run()
+            if self._capture_env:
+                self._attach_environment()
+            if self._system_metrics_enabled:
+                self._start_system_monitor()
+
+    def _attach_environment(self) -> None:
+        try:
+            env = capture_environment()
+            self._request(
+                "POST",
+                f"/v1/runs/{self.run_id}/artifacts",
+                {"name": "environment", "kind": "json", "data": env},
+            )
+            n_gpus = len(env.get("gpus") or [])
+            _log.info(
+                "environment captured: python=%s os=%s gpus=%d",
+                env.get("python", {}).get("version"),
+                env.get("os", {}).get("system"),
+                n_gpus,
+            )
+        except Exception as e:  # noqa: BLE001
+            _log.warning("failed to capture environment: %s", e)
+
+    def _start_system_monitor(self) -> None:
+        # The monitor calls back into self.log() with system/* keys. We use
+        # commit=True so each sample lands immediately — system metrics are
+        # low-volume (one sample / 15s) so the per-sample HTTP cost is fine.
+        def _emit(values):  # type: ignore[no-untyped-def]
+            try:
+                # No step provided → use the SDK's auto-incrementing counter.
+                # System samples and user log() calls share the step space,
+                # which is intentional — they're plotted on the same x-axis.
+                self.log(values)
+            except Exception as e:  # noqa: BLE001
+                _log.debug("system log() failed: %s", e)
+
+        self._monitor = SystemMonitor(
+            _emit, interval=self._system_metrics_interval
+        )
+        self._monitor.start()
 
     # ----- HTTP ----------------------------------------------------------- #
 
@@ -310,6 +358,9 @@ class TrainingRun:
             )
         if not self.run_id:
             raise ClaudeMonitorError("run is not active")
+        if self._monitor is not None:
+            self._monitor.stop()
+            self._monitor = None
         try:
             self.flush()
         finally:

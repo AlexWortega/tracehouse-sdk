@@ -61,7 +61,7 @@ def test_init_run_posts_run_with_config_and_auth(transport: FakeTransport):
         name="demo",
         project="proj",
         config={"lr": 1e-4, "batch": 32},
-        transport=transport,
+        transport=transport, capture_env=False, system_metrics=False,
     )
     assert run.run_id is not None
 
@@ -76,7 +76,7 @@ def test_init_run_posts_run_with_config_and_auth(transport: FakeTransport):
 
 
 def test_log_scalar_posts_metrics(transport: FakeTransport):
-    run = TrainingRun(api_key="ba_test", name="demo", transport=transport)
+    run = TrainingRun(api_key="ba_test", name="demo", transport=transport, capture_env=False, system_metrics=False)
     run.log({"train/loss": 0.4}, step=10)
 
     last = transport.calls[-1]
@@ -90,7 +90,7 @@ def test_log_scalar_posts_metrics(transport: FakeTransport):
 
 
 def test_log_array_value_passes_through(transport: FakeTransport):
-    run = TrainingRun(api_key="ba_test", name="demo", transport=transport)
+    run = TrainingRun(api_key="ba_test", name="demo", transport=transport, capture_env=False, system_metrics=False)
     run.log({"grad/norm_hist": [0.1, 0.2, 0.3]}, step=1)
 
     pts = transport.calls[-1]["body"]["points"]
@@ -98,7 +98,7 @@ def test_log_array_value_passes_through(transport: FakeTransport):
 
 
 def test_log_auto_step(transport: FakeTransport):
-    run = TrainingRun(api_key="ba_test", name="demo", transport=transport)
+    run = TrainingRun(api_key="ba_test", name="demo", transport=transport, capture_env=False, system_metrics=False)
     run.log({"a": 1.0})
     run.log({"a": 2.0})
     steps = [c["body"]["points"][0]["step"] for c in transport.calls[1:]]
@@ -107,7 +107,7 @@ def test_log_auto_step(transport: FakeTransport):
 
 def test_log_buffered_until_threshold(transport: FakeTransport):
     run = TrainingRun(
-        api_key="ba_test", name="demo", transport=transport, flush_threshold=3
+        api_key="ba_test", name="demo", transport=transport, capture_env=False, system_metrics=False, flush_threshold=3
     )
     n_before = len(transport.calls)
     run.log({"a": 1.0}, step=1, commit=False)
@@ -120,7 +120,7 @@ def test_log_buffered_until_threshold(transport: FakeTransport):
 
 
 def test_link_dataset_patches_run(transport: FakeTransport):
-    run = TrainingRun(api_key="ba_test", name="demo", transport=transport)
+    run = TrainingRun(api_key="ba_test", name="demo", transport=transport, capture_env=False, system_metrics=False)
     run.link_dataset("HuggingFaceH4/ultrachat_200k", split="train_sft")
     last = transport.calls[-1]
     assert last["method"] == "PATCH"
@@ -132,14 +132,14 @@ def test_link_dataset_patches_run(transport: FakeTransport):
 
 
 def test_link_model_patches_run(transport: FakeTransport):
-    run = TrainingRun(api_key="ba_test", name="demo", transport=transport)
+    run = TrainingRun(api_key="ba_test", name="demo", transport=transport, capture_env=False, system_metrics=False)
     run.link_model("alex/my-finetune", revision="abc123")
     last = transport.calls[-1]
     assert last["body"] == {"hf_model": "alex/my-finetune", "hf_model_revision": "abc123"}
 
 
 def test_add_artifact_posts(transport: FakeTransport):
-    run = TrainingRun(api_key="ba_test", name="demo", transport=transport)
+    run = TrainingRun(api_key="ba_test", name="demo", transport=transport, capture_env=False, system_metrics=False)
     run.add_artifact("hparams", data={"warmup_ratio": 0.03})
     last = transport.calls[-1]
     assert last["url"].endswith(f"/v1/runs/{run.run_id}/artifacts")
@@ -152,7 +152,7 @@ def test_add_artifact_posts(transport: FakeTransport):
 
 def test_finish_flushes_then_patches(transport: FakeTransport):
     run = TrainingRun(
-        api_key="ba_test", name="demo", transport=transport, flush_threshold=100
+        api_key="ba_test", name="demo", transport=transport, capture_env=False, system_metrics=False, flush_threshold=100
     )
     run.log({"a": 1.0}, step=1, commit=False)  # buffered
     n_calls_before = len(transport.calls)
@@ -166,7 +166,7 @@ def test_finish_flushes_then_patches(transport: FakeTransport):
 
 def test_context_manager_crashes_on_exception(transport: FakeTransport):
     with pytest.raises(RuntimeError):
-        with TrainingRun(api_key="ba_test", name="demo", transport=transport) as r:
+        with TrainingRun(api_key="ba_test", name="demo", transport=transport, capture_env=False, system_metrics=False) as r:
             raise RuntimeError("boom")
     last = transport.calls[-1]
     assert last["method"] == "PATCH"
@@ -186,7 +186,7 @@ def test_module_level_init_run(transport: FakeTransport, monkeypatch):
     import claude_monitor._global as g
 
     monkeypatch.setattr(g, "_current_run", None)
-    r = cm.init_run(api_key="ba_test", name="x", transport=transport)
+    r = cm.init_run(api_key="ba_test", name="x", transport=transport, capture_env=False, system_metrics=False)
     assert cm.current_run() is r
     cm.run_log({"loss": 0.1}, step=0)
     last = transport.calls[-1]
@@ -194,7 +194,7 @@ def test_module_level_init_run(transport: FakeTransport, monkeypatch):
 
 
 def test_model_card_returns_markdown(transport: FakeTransport):
-    run = TrainingRun(api_key="ba_test", name="demo", transport=transport)
+    run = TrainingRun(api_key="ba_test", name="demo", transport=transport, capture_env=False, system_metrics=False)
     transport.push(200, "# fake markdown body")
     md = run.model_card()
     assert "fake markdown" in md
@@ -202,11 +202,11 @@ def test_model_card_returns_markdown(transport: FakeTransport):
 
 
 def test_invalid_status_rejected(transport: FakeTransport):
-    run = TrainingRun(api_key="ba_test", name="demo", transport=transport)
+    run = TrainingRun(api_key="ba_test", name="demo", transport=transport, capture_env=False, system_metrics=False)
     with pytest.raises(cm.ClaudeMonitorError):
         run.finish(status="not-a-status")
 
 
 def test_api_key_must_start_with_ba(transport: FakeTransport):
     with pytest.raises(cm.ClaudeMonitorError):
-        TrainingRun(api_key="not_valid", name="demo", transport=transport)
+        TrainingRun(api_key="not_valid", name="demo", transport=transport, capture_env=False, system_metrics=False)
