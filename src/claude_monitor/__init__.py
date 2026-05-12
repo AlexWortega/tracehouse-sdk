@@ -30,6 +30,7 @@ from .client import (
     Run,
     Span,
 )
+from .training import TrainingRun
 from ._global import (
     init,
     log_user,
@@ -41,6 +42,10 @@ from ._global import (
     log,
     finish,
     current,
+    init_run,
+    run_log,
+    run_finish,
+    current_run,
 )
 
 __all__ = [
@@ -48,6 +53,7 @@ __all__ = [
     "ClaudeMonitorError",
     "Run",
     "Span",
+    "TrainingRun",
     "init",
     "log_user",
     "log_assistant",
@@ -58,6 +64,10 @@ __all__ = [
     "log",
     "finish",
     "current",
+    "init_run",
+    "run_log",
+    "run_finish",
+    "current_run",
 ]
 
 __version__ = "0.1.0"

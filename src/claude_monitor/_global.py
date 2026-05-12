@@ -10,8 +10,10 @@ from __future__ import annotations
 from typing import Any, Mapping, Optional
 
 from .client import Run, Span, ClaudeMonitorError
+from .training import TrainingRun
 
 _current: Optional[Run] = None
+_current_run: Optional[TrainingRun] = None
 
 
 def init(**kwargs: Any) -> Run:
@@ -86,3 +88,40 @@ def log_attachment(
     **kw: Any,
 ) -> Span:
     return current().log_attachment(name, attributes, **kw)
+
+
+# ----- Training runs (wandb-style) -------------------------------------- #
+
+
+def init_run(**kwargs: Any) -> TrainingRun:
+    """Create the implicit ``TrainingRun`` for the module-level ``run_*``
+    helpers. Re-calling finishes the previous run (with ``status=killed``)
+    and starts a new one — same shape as ``wandb.init``."""
+    global _current_run
+    if _current_run is not None:
+        try:
+            _current_run.finish(status="killed")
+        except Exception:  # noqa: BLE001
+            pass
+    _current_run = TrainingRun(**kwargs)
+    return _current_run
+
+
+def current_run() -> TrainingRun:
+    if _current_run is None:
+        raise ClaudeMonitorError(
+            "no active training run — call claude_monitor.init_run() first"
+        )
+    return _current_run
+
+
+def run_log(values: Mapping[str, Any], **kw: Any) -> None:
+    current_run().log(values, **kw)
+
+
+def run_finish(**kw: Any) -> None:
+    global _current_run
+    if _current_run is None:
+        return
+    _current_run.finish(**kw)
+    _current_run = None

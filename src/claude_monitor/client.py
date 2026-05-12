@@ -83,6 +83,60 @@ def _urllib_transport(
         raise ClaudeMonitorError(f"network error: {e}") from e
 
 
+def _resolve_api_base(api_base: Optional[str]) -> str:
+    return (
+        api_base
+        or os.environ.get("CLAUDE_MONITOR_API_BASE")
+        or "https://api-production-a0da.up.railway.app"
+    ).rstrip("/")
+
+
+def _validate_api_key(api_key: Optional[str]) -> str:
+    key = api_key or os.environ.get("CLAUDE_MONITOR_API_KEY")
+    if not key:
+        raise ClaudeMonitorError(
+            "api_key is required (or set CLAUDE_MONITOR_API_KEY)"
+        )
+    if not key.startswith("ba_"):
+        raise ClaudeMonitorError(
+            "api_key should start with 'ba_' — did you paste a session token by mistake?"
+        )
+    return key
+
+
+def _do_request(
+    *,
+    transport: Transport,
+    api_base: str,
+    api_key: str,
+    machine_id: str,
+    hostname: Optional[str],
+    agent_version: Optional[str],
+    method: str,
+    path: str,
+    body: Optional[Any],
+) -> dict[str, Any]:
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "content-type": "application/json",
+        "X-Claude-Monitor-Machine-Id": machine_id,
+    }
+    if hostname:
+        headers["X-Claude-Monitor-Hostname"] = hostname
+    if agent_version:
+        headers["X-Claude-Monitor-Agent-Version"] = agent_version
+    payload = json.dumps(body).encode("utf-8") if body is not None else None
+    resp = transport(method, f"{api_base}{path}", headers, payload)
+    if resp.status >= 400:
+        raise ApiError(resp.status, resp.body.decode("utf-8", errors="replace"))
+    if not resp.body:
+        return {}
+    try:
+        return json.loads(resp.body)
+    except json.JSONDecodeError:
+        return {"raw": resp.body.decode("utf-8", errors="replace")}
+
+
 # --------------------------------------------------------------------------- #
 # Span / Run.
 # --------------------------------------------------------------------------- #
@@ -142,23 +196,8 @@ class Run:
         transport: Optional[Transport] = None,
         auto_create: bool = True,
     ) -> None:
-        key = api_key or os.environ.get("CLAUDE_MONITOR_API_KEY")
-        if not key:
-            raise ClaudeMonitorError(
-                "api_key is required (or set CLAUDE_MONITOR_API_KEY)"
-            )
-        if not key.startswith("ba_"):
-            # Not strictly required, but every key minted by the BetterAuth
-            # plugin starts with this prefix; warn early.
-            raise ClaudeMonitorError(
-                "api_key should start with 'ba_' — did you paste a session token by mistake?"
-            )
-        self._api_key = key
-        self._api_base = (
-            api_base
-            or os.environ.get("CLAUDE_MONITOR_API_BASE")
-            or "https://api-production-a0da.up.railway.app"
-        ).rstrip("/")
+        self._api_key = _validate_api_key(api_key)
+        self._api_base = _resolve_api_base(api_base)
         self._transport = transport or _urllib_transport
 
         self.session_id = session_id or f"py-{uuid.uuid4()}"
@@ -179,25 +218,17 @@ class Run:
     # ----- HTTP ----------------------------------------------------------- #
 
     def _request(self, method: str, path: str, body: Optional[Any]) -> dict[str, Any]:
-        headers = {
-            "Authorization": f"Bearer {self._api_key}",
-            "content-type": "application/json",
-            "X-Claude-Monitor-Machine-Id": self.machine_id,
-        }
-        if self.hostname:
-            headers["X-Claude-Monitor-Hostname"] = self.hostname
-        if self.agent_version:
-            headers["X-Claude-Monitor-Agent-Version"] = self.agent_version
-        payload = json.dumps(body).encode("utf-8") if body is not None else None
-        resp = self._transport(method, f"{self._api_base}{path}", headers, payload)
-        if resp.status >= 400:
-            raise ApiError(resp.status, resp.body.decode("utf-8", errors="replace"))
-        if not resp.body:
-            return {}
-        try:
-            return json.loads(resp.body)
-        except json.JSONDecodeError:
-            return {"raw": resp.body.decode("utf-8", errors="replace")}
+        return _do_request(
+            transport=self._transport,
+            api_base=self._api_base,
+            api_key=self._api_key,
+            machine_id=self.machine_id,
+            hostname=self.hostname,
+            agent_version=self.agent_version,
+            method=method,
+            path=path,
+            body=body,
+        )
 
     # ----- lifecycle ------------------------------------------------------ #
 
