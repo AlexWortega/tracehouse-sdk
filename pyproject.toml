@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "claude-monitor-sdk"
-version = "0.4.0"
+version = "0.5.0"
 description = "claude-monitor SDK — push traces & spans to claude-monitor from Python, wandb-style."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -29,10 +29,10 @@ Homepage = "https://github.com/AlexWortega/claude-monitor"
 Source = "https://github.com/AlexWortega/claude-monitor"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/claude_monitor", "src/trackio"]
+packages = ["src/claude_monitor"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/claude_monitor", "src/trackio", "README.md", "LICENSE"]
+include = ["src/claude_monitor", "README.md", "LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,8 +1,9 @@
-"""trackio — wandb-compatible API for claude-monitor.
+"""claude_monitor.wandb — wandb-compatible API surface, hosted under our
+namespace (no separate package).
 
 Drop-in for the wandb call sites most user code actually uses::
 
-    import trackio as wandb
+    from claude_monitor import wandb         # or: import claude_monitor.wandb as wandb
 
     run = wandb.init(project="demo", name="qwen-sft",
                      config={"lr": 1e-4, "batch": 32})
@@ -283,7 +284,7 @@ def __getattr__(name: str) -> Any:
         return _config_proxy
     if name == "summary":
         return _summary_proxy
-    raise AttributeError(f"module 'trackio' has no attribute {name!r}")
+    raise AttributeError(f"module 'claude_monitor.wandb' has no attribute {name!r}")
 
 
 # --------------------------------------------------------------------------- #

@@ -40,6 +40,7 @@ to HF, artifacts stored). DEBUG adds every HTTP request/response.
 WARNING fires for API errors and dropped metric points (NaN/Inf).
 """
 
+from . import wandb  # noqa: F401 — re-exported so `from claude_monitor import wandb` works
 from .client import (
     ApiError,
     ClaudeMonitorError,
@@ -70,6 +71,7 @@ __all__ = [
     "Run",
     "Span",
     "TrainingRun",
+    "wandb",
     "init",
     "log_user",
     "log_assistant",
@@ -86,4 +88,4 @@ __all__ = [
     "current_run",
 ]
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"

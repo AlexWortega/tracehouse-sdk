@@ -1,4 +1,4 @@
-"""trackio (wandb-compat) tests against an in-memory transport."""
+"""wandb-compat tests for claude_monitor.wandb against an in-memory transport."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any, List, Mapping, Optional
 
 import pytest
 
-import trackio as wandb
+from claude_monitor import wandb
 from claude_monitor.client import HttpResponse
 
 
