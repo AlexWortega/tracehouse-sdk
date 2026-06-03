@@ -31,14 +31,18 @@ from typing import Any, Iterable, Mapping, Optional
 _log = logging.getLogger(__name__)
 
 from .client import (
+    AuthContext,
     ClaudeMonitorError,
+    Run,
     Transport,
     _do_request,
     _machine_id_default,
     _resolve_api_base,
+    _resolve_auth,
+    _resolve_web_url,
     _urllib_transport,
     _utcnow_iso,
-    _validate_api_key,
+    _warn_anonymous,
 )
 from .system import SystemMonitor, capture_environment
 
@@ -76,9 +80,16 @@ class TrainingRun:
         system_metrics: bool = True,
         system_metrics_interval: float = 15.0,
     ) -> None:
-        self._api_key = _validate_api_key(api_key)
         self._api_base = _resolve_api_base(api_base)
         self._transport = transport or _urllib_transport
+        auth = _resolve_auth(
+            api_key, self._api_base, self._transport, allow_cache=transport is None
+        )
+        self._api_key = auth.token
+        self._is_anonymous = auth.is_anonymous
+        self._web_url = _resolve_web_url(None, auth.web_url)
+        self._claim_token = auth.claim_token
+        self._read_token = auth.read_token
         self.machine_id = machine_id or _machine_id_default()
         self.hostname = hostname or platform.node() or None
         self.agent_version = agent_version
@@ -105,6 +116,11 @@ class TrainingRun:
 
         if auto_create:
             self._create_run()
+            if self._is_anonymous and self.run_id:
+                _warn_anonymous(
+                    f"{self._web_url}/r/{self.run_id}?t={self._read_token}",
+                    f"{self._web_url}/claim?token={self._claim_token}",
+                )
             if self._capture_env:
                 self._attach_environment()
             if self._system_metrics_enabled:
@@ -193,6 +209,57 @@ class TrainingRun:
             self.name,
             f" project={self.project}" if self.project else "",
             "" if resp.get("created", True) else " (resumed)",
+        )
+
+    # ----- rollouts ------------------------------------------------------- #
+
+    def rollout(
+        self,
+        *,
+        step: Optional[int] = None,
+        name: Optional[str] = None,
+        session_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Run:
+        """Open a chat trace tied to this run as one rollout (RL pattern).
+
+        Returns a :class:`Run` already tagged with this run's id and the given
+        step, so it shows up under the run's *Rollouts* tab. Use it as a
+        context manager::
+
+            for step in range(n):
+                with run.rollout(step=step) as t:
+                    t.log_user(state)
+                    t.log_assistant(action)
+                    t.log_tool_result(f"reward={reward}")
+                run.log({"reward": reward}, step=step)
+
+        Auth/transport are inherited from the run, so an anonymous run produces
+        anonymous rollouts under the same identity (one claim link covers both).
+        """
+        if not self.run_id:
+            raise ClaudeMonitorError("run was not created — no run_id")
+        if step is None:
+            step = self._auto_step
+        return Run(
+            api_base=self._api_base,
+            transport=self._transport,
+            _auth=AuthContext(
+                token=self._api_key,
+                is_anonymous=self._is_anonymous,
+                web_url=self._web_url,
+                claim_token=self._claim_token,
+                read_token=self._read_token,
+            ),
+            project=self.project,
+            session_id=session_id or f"{self.name}-step{step}",
+            task_name=name or f"rollout step {step}",
+            machine_id=self.machine_id,
+            hostname=self.hostname,
+            agent_version=self.agent_version,
+            run_id=self.run_id,
+            rollout_step=step,
+            **kwargs,
         )
 
     # ----- metric ingest -------------------------------------------------- #

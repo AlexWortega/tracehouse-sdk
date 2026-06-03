@@ -112,6 +112,155 @@ def _validate_api_key(api_key: Optional[str]) -> str:
     return key
 
 
+_DEFAULT_WEB_URL = "https://web-production-8ef489.up.railway.app"
+
+# Emit the big "you are not logged in" banner at most once per process; the
+# per-entity view link is still logged on every anonymous run.
+_anon_banner_shown = False
+
+
+@dataclass
+class AuthContext:
+    """Resolved credentials for a Run/TrainingRun.
+
+    ``token`` is whatever goes in the ``Authorization: Bearer`` header — either
+    a real ``ba_…`` key or an anonymous ``anon_…`` ingest token. ``read_token``
+    is the separate read-only secret that goes into ``?t=`` share links; it must
+    never be sent as the Bearer.
+    """
+
+    token: str
+    is_anonymous: bool
+    web_url: Optional[str] = None
+    claim_token: Optional[str] = None
+    read_token: Optional[str] = None
+
+
+def _resolve_web_url(explicit: Optional[str], from_server: Optional[str]) -> str:
+    return (
+        explicit
+        or os.environ.get("CLAUDE_MONITOR_WEB_URL")
+        or from_server
+        or _DEFAULT_WEB_URL
+    ).rstrip("/")
+
+
+def _anon_cache_path(api_base: str) -> "Path":
+    from pathlib import Path
+    from urllib.parse import urlparse
+
+    host = (urlparse(api_base).netloc or "default").replace(":", "_")
+    base = os.environ.get("XDG_CACHE_HOME") or os.path.join(
+        os.path.expanduser("~"), ".cache"
+    )
+    return Path(base) / "claude-monitor" / f"anon-{host}.json"
+
+
+def _load_anon(api_base: str) -> Optional[dict[str, Any]]:
+    try:
+        path = _anon_cache_path(api_base)
+        data = json.loads(path.read_text())
+        # Require read_token too, so caches written by an older SDK (Bearer-as-share-token)
+        # are ignored and a fresh, separated session is minted instead.
+        if (
+            isinstance(data, dict)
+            and data.get("token", "").startswith("anon_")
+            and data.get("read_token", "").startswith("anon_")
+        ):
+            return data
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _save_anon(api_base: str, data: Mapping[str, Any]) -> None:
+    try:
+        path = _anon_cache_path(api_base)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(dict(data)))
+    except OSError as e:  # best-effort; a read-only HOME shouldn't break logging
+        _log.debug("could not persist anon session: %s", e)
+
+
+def _mint_anon_session(transport: Transport, api_base: str) -> dict[str, Any]:
+    resp = transport(
+        "POST", f"{api_base}/v1/anon/session", {"content-type": "application/json"}, b"{}"
+    )
+    if resp.status >= 400:
+        raise ApiError(resp.status, resp.body.decode("utf-8", errors="replace"))
+    return json.loads(resp.body)
+
+
+def _resolve_auth(
+    api_key: Optional[str],
+    api_base: str,
+    transport: Transport,
+    *,
+    allow_cache: bool = True,
+) -> AuthContext:
+    """Resolve a real key, or bootstrap an anonymous session when none is given."""
+    key = api_key or os.environ.get("CLAUDE_MONITOR_API_KEY")
+    if key:
+        if not key.startswith("ba_"):
+            raise ClaudeMonitorError(
+                "api_key should start with 'ba_' — did you paste a session token by mistake?"
+            )
+        return AuthContext(token=key, is_anonymous=False)
+
+    if os.environ.get("CLAUDE_MONITOR_ANON", "1") == "0":
+        raise ClaudeMonitorError(
+            "api_key is required (or set CLAUDE_MONITOR_API_KEY). "
+            "Unset CLAUDE_MONITOR_ANON to send anonymously instead."
+        )
+
+    if allow_cache:
+        cached = _load_anon(api_base)
+        if cached:
+            return AuthContext(
+                token=cached["token"],
+                is_anonymous=True,
+                web_url=cached.get("web_url"),
+                claim_token=cached.get("claim_token"),
+                read_token=cached.get("read_token"),
+            )
+
+    data = _mint_anon_session(transport, api_base)
+    if allow_cache:
+        _save_anon(api_base, data)
+    return AuthContext(
+        token=data["token"],
+        is_anonymous=True,
+        web_url=data.get("web_url"),
+        claim_token=data.get("claim_token"),
+        read_token=data.get("read_token"),
+    )
+
+
+def _warn_anonymous(view_url: str, claim_url: str) -> None:
+    """Loud one-time banner + always-logged per-entity link."""
+    global _anon_banner_shown
+    _log.warning("anonymous mode — data is public; view: %s", view_url)
+    if _anon_banner_shown:
+        return
+    _anon_banner_shown = True
+    import sys
+
+    banner = (
+        "\n"
+        "============================================================\n"
+        " ⚠  claude-monitor: YOU ARE NOT LOGGED IN\n"
+        "    Everything you send is PUBLIC — anyone with the link can read it.\n"
+        f"    View / share      : {view_url}\n"
+        f"    Log in to claim it: {claim_url}\n"
+        "============================================================\n"
+    )
+    try:
+        sys.stderr.write(banner)
+        sys.stderr.flush()
+    except Exception:  # noqa: BLE001 — never let a logging banner crash a run
+        pass
+
+
 def _do_request(
     *,
     transport: Transport,
@@ -211,12 +360,25 @@ class Run:
         machine_id: Optional[str] = None,
         hostname: Optional[str] = None,
         agent_version: Optional[str] = None,
+        run_id: Optional[str] = None,
+        rollout_step: Optional[int] = None,
         transport: Optional[Transport] = None,
         auto_create: bool = True,
+        _auth: Optional["AuthContext"] = None,
     ) -> None:
-        self._api_key = _validate_api_key(api_key)
         self._api_base = _resolve_api_base(api_base)
         self._transport = transport or _urllib_transport
+        # `_auth` lets a caller (e.g. TrainingRun.rollout) reuse an
+        # already-resolved identity so an anon rollout shares the parent's
+        # sentinel instead of minting a fresh one.
+        auth = _auth or _resolve_auth(
+            api_key, self._api_base, self._transport, allow_cache=transport is None
+        )
+        self._api_key = auth.token
+        self._is_anonymous = auth.is_anonymous
+        self._web_url = _resolve_web_url(None, auth.web_url)
+        self._claim_token = auth.claim_token
+        self._read_token = auth.read_token
 
         self.session_id = session_id or f"py-{uuid.uuid4()}"
         self.project = project
@@ -226,12 +388,19 @@ class Run:
         self.machine_id = machine_id or _machine_id_default()
         self.hostname = hostname or platform.node() or None
         self.agent_version = agent_version
+        self.run_id = run_id
+        self.rollout_step = rollout_step
 
         self.trace_id: Optional[str] = None
         self._closed = False
 
         if auto_create:
             self._create_trace()
+            if self._is_anonymous and self.trace_id:
+                _warn_anonymous(
+                    f"{self._web_url}/t/{self.trace_id}?t={self._read_token}",
+                    f"{self._web_url}/claim?token={self._claim_token}",
+                )
 
     # ----- HTTP ----------------------------------------------------------- #
 
@@ -260,6 +429,10 @@ class Run:
             body["task_name"] = self.task_name
         if self.model is not None:
             body["model"] = self.model
+        if self.run_id is not None:
+            body["run_id"] = self.run_id
+        if self.rollout_step is not None:
+            body["rollout_step"] = self.rollout_step
         body["started_at"] = _utcnow_iso()
         resp = self._request("POST", "/v1/traces", body)
         self.trace_id = resp.get("id")

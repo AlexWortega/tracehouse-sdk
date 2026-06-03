@@ -66,3 +66,30 @@ with cm.Run(project="my-bot", session_id="run-002") as run:
 
 Common attributes the UI surfaces directly: `text` (string), `result_text`
 (string), `tool_input` (object). Anything else lands in the raw JSON view.
+
+## RL: runs + rollout traces
+
+Log a training run's **metrics** and its per-step **rollout conversations** together.
+`run.rollout(step=…)` opens a chat trace already linked to the run, so every rollout
+shows up under the run's **Rollouts** tab (step → trace).
+
+```python
+import claude_monitor as cm
+
+run = cm.init_run(project="rl", name="ppo-v1", config={"lr": 1e-5})
+
+for step in range(1000):
+    # One chat trace per rollout, tied to this run + step.
+    with run.rollout(step=step) as t:
+        t.log_user(state)
+        t.log_assistant(action)
+        t.log_tool_result(f"reward={reward}")
+    run.log({"reward": reward, "kl": kl}, step=step)   # metrics on the run
+
+run.finish()
+```
+
+`rollout()` returns a normal `Run` (any `log_*` helper works) and inherits the run's
+auth — so an anonymous run produces anonymous rollouts under the **same** identity, and
+a single claim link covers the run and all its traces. `step` defaults to the run's
+auto-incrementing counter; pass `name=` / `session_id=` to override the trace labels.

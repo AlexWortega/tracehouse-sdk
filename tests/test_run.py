@@ -108,8 +108,9 @@ def test_finish_validates_outcome(transport: FakeTransport):
         run.finish(outcome="excellent")  # type: ignore[arg-type]
 
 
-def test_run_requires_api_key(monkeypatch):
+def test_run_requires_api_key_when_anon_disabled(monkeypatch):
     monkeypatch.delenv("CLAUDE_MONITOR_API_KEY", raising=False)
+    monkeypatch.setenv("CLAUDE_MONITOR_ANON", "0")
     with pytest.raises(cm.ClaudeMonitorError):
         Run(session_id="x")
 
@@ -117,6 +118,40 @@ def test_run_requires_api_key(monkeypatch):
 def test_run_rejects_non_ba_key():
     with pytest.raises(cm.ClaudeMonitorError):
         Run(api_key="not_a_ba_key", session_id="x")
+
+
+def test_run_anonymous_bootstraps_session_and_warns(monkeypatch, capsys):
+    monkeypatch.delenv("CLAUDE_MONITOR_API_KEY", raising=False)
+    monkeypatch.setenv("CLAUDE_MONITOR_WEB_URL", "https://web.example")
+    import claude_monitor.client as client
+
+    client._anon_banner_shown = False  # reset one-time banner guard
+
+    t = FakeTransport()
+    # 1) anon session mint, 2) trace create
+    t.push(200, {
+        "user_id": "sentinel-1",
+        "token": "anon_abc",
+        "read_token": "anon_read_abc",
+        "claim_token": "claim_xyz",
+        "web_url": "https://web.example",
+    })
+    t.push(200, {"id": "trace-1", "session_id": "x", "created": True})
+
+    run = Run(session_id="x", transport=t)
+
+    # First call mints the anon session, with no real api key.
+    assert t.calls[0]["url"].endswith("/v1/anon/session")
+    # Subsequent calls carry the ingest bearer (NOT the read token).
+    assert run.trace_id == "trace-1"
+    assert t.calls[1]["headers"]["Authorization"] == "Bearer anon_abc"
+
+    err = capsys.readouterr().err
+    assert "YOU ARE NOT LOGGED IN" in err
+    # Share link uses the read-only token, never the ingest bearer.
+    assert "https://web.example/t/trace-1?t=anon_read_abc" in err
+    assert "?t=anon_abc" not in err
+    assert "https://web.example/claim?token=claim_xyz" in err
 
 
 def test_api_error_on_non_2xx(transport: FakeTransport):

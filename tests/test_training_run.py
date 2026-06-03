@@ -210,3 +210,96 @@ def test_invalid_status_rejected(transport: FakeTransport):
 def test_api_key_must_start_with_ba(transport: FakeTransport):
     with pytest.raises(cm.ClaudeMonitorError):
         TrainingRun(api_key="not_valid", name="demo", transport=transport, capture_env=False, system_metrics=False)
+
+
+def test_anon_disabled_requires_key(monkeypatch, transport: FakeTransport):
+    monkeypatch.delenv("CLAUDE_MONITOR_API_KEY", raising=False)
+    monkeypatch.setenv("CLAUDE_MONITOR_ANON", "0")
+    with pytest.raises(cm.ClaudeMonitorError):
+        TrainingRun(name="demo", transport=transport, capture_env=False, system_metrics=False)
+
+
+def test_anonymous_run_bootstraps_and_uses_anon_bearer(monkeypatch, capsys):
+    monkeypatch.delenv("CLAUDE_MONITOR_API_KEY", raising=False)
+    monkeypatch.setenv("CLAUDE_MONITOR_WEB_URL", "https://web.example")
+    import claude_monitor.client as client
+
+    client._anon_banner_shown = False
+
+    t = FakeTransport()
+    t.push(200, {
+        "user_id": "sentinel-2",
+        "token": "anon_run",
+        "read_token": "anon_read_run",
+        "claim_token": "claim_run",
+        "web_url": "https://web.example",
+    })
+    t.push(200, {"id": "run-1", "name": "demo", "created": True})
+
+    run = TrainingRun(
+        name="demo", transport=t, capture_env=False, system_metrics=False
+    )
+
+    assert t.calls[0]["url"].endswith("/v1/anon/session")
+    assert run.run_id == "run-1"
+    assert t.calls[1]["headers"]["Authorization"] == "Bearer anon_run"
+
+    err = capsys.readouterr().err
+    # Share link uses the read-only token, never the ingest bearer.
+    assert "https://web.example/r/run-1?t=anon_read_run" in err
+    assert "?t=anon_run" not in err
+    assert "https://web.example/claim?token=claim_run" in err
+
+
+def test_rollout_links_trace_to_run(transport: FakeTransport):
+    run = TrainingRun(
+        api_key="ba_test", name="demo", project="rl",
+        transport=transport, capture_env=False, system_metrics=False,
+    )
+    transport.push(200, {"id": "trace-xyz", "session_id": "demo-step3", "created": True})
+    t = run.rollout(step=3)
+
+    assert t.trace_id == "trace-xyz"
+    last = transport.calls[-1]
+    assert last["method"] == "POST"
+    assert last["url"].endswith("/v1/traces")
+    assert last["headers"]["Authorization"] == "Bearer ba_test"
+    assert last["body"]["run_id"] == run.run_id
+    assert last["body"]["rollout_step"] == 3
+    assert last["body"]["session_id"] == "demo-step3"
+    assert last["body"]["project"] == "rl"
+
+
+def test_rollout_defaults_to_auto_step(transport: FakeTransport):
+    run = TrainingRun(api_key="ba_test", name="demo", transport=transport, capture_env=False, system_metrics=False)
+    run.log({"a": 1.0})  # advances _auto_step to 1
+    transport.push(200, {"id": "trace-1", "created": True})
+    t = run.rollout()
+    assert t.rollout_step == run._auto_step
+    assert transport.calls[-1]["body"]["rollout_step"] == run._auto_step
+
+
+def test_anon_rollout_reuses_run_identity(monkeypatch):
+    monkeypatch.delenv("CLAUDE_MONITOR_API_KEY", raising=False)
+    monkeypatch.setenv("CLAUDE_MONITOR_WEB_URL", "https://web.example")
+    import claude_monitor.client as client
+
+    client._anon_banner_shown = False
+
+    t = FakeTransport()
+    t.push(200, {
+        "user_id": "sentinel", "token": "anon_run", "read_token": "anon_read_run",
+        "claim_token": "claim_run", "web_url": "https://web.example",
+    })
+    t.push(200, {"id": "run-1", "name": "demo", "created": True})
+    run = TrainingRun(name="demo", transport=t, capture_env=False, system_metrics=False)
+
+    t.push(200, {"id": "trace-1", "created": True})
+    roll = run.rollout(step=0)
+
+    # No fresh anon session: the rollout inherits the run's identity.
+    assert sum(1 for c in t.calls if c["url"].endswith("/v1/anon/session")) == 1
+    assert t.calls[-1]["url"].endswith("/v1/traces")
+    assert t.calls[-1]["headers"]["Authorization"] == "Bearer anon_run"
+    assert t.calls[-1]["body"]["run_id"] == "run-1"
+    assert roll._is_anonymous is True
