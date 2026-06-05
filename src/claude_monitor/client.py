@@ -95,7 +95,7 @@ def _resolve_api_base(api_base: Optional[str]) -> str:
     return (
         api_base
         or os.environ.get("CLAUDE_MONITOR_API_BASE")
-        or "https://api-production-a0da.up.railway.app"
+        or "https://clewe.ai"
     ).rstrip("/")
 
 
@@ -112,7 +112,7 @@ def _validate_api_key(api_key: Optional[str]) -> str:
     return key
 
 
-_DEFAULT_WEB_URL = "https://web-production-8ef489.up.railway.app"
+_DEFAULT_WEB_URL = "https://clewe.ai"
 
 # Emit the big "you are not logged in" banner at most once per process; the
 # per-entity view link is still logged on every anonymous run.
