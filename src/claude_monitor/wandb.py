@@ -48,6 +48,7 @@ __all__ = [
     "summary",
     "run",
     "Run",
+    "define_metric",
     # media / data wrappers
     "Histogram",
     "Image",
@@ -69,11 +70,23 @@ __all__ = [
     "ClaudeMonitorError",
 ]
 
-__version__ = "0.4.0"
+__version__ = "0.5.1"
 
 ONLINE = "online"
 OFFLINE = "offline"
 DISABLED = "disabled"
+
+
+class _MetricDef:
+    """Lightweight return value for ``define_metric`` — wandb returns a Metric
+    object that most code ignores; we mirror just its identity."""
+
+    def __init__(self, name: str, spec: Mapping[str, Any]) -> None:
+        self.name = name
+        self.spec = dict(spec)
+
+    def __repr__(self) -> str:
+        return f"<MetricDef {self.name!r} {self.spec!r}>"
 
 
 # --------------------------------------------------------------------------- #
@@ -133,6 +146,37 @@ class Run:
         status = "finished" if not exit_code else "failed"
         self._inner.finish(status=status)
 
+    def define_metric(
+        self,
+        name: str,
+        *,
+        step_metric: Optional[str] = None,
+        summary: Optional[str] = None,
+        goal: Optional[str] = None,
+        hidden: Optional[bool] = None,
+        **_kw: Any,
+    ) -> "_MetricDef":
+        """``wandb.define_metric`` parity. We record the definition into the
+        run config (under ``_metric_defs``) so it's inspectable in the Config
+        tab; server-side summary aggregation by it is best-effort/TBD."""
+        spec = {
+            k: v
+            for k, v in {
+                "step_metric": step_metric,
+                "summary": summary,
+                "goal": goal,
+                "hidden": hidden,
+            }.items()
+            if v is not None
+        }
+        try:
+            defs = dict(self._inner.config.get("_metric_defs", {}))
+            defs[name] = spec
+            self._inner.config["_metric_defs"] = defs
+        except Exception:
+            pass
+        return _MetricDef(name, spec)
+
     # --- HF link parity with cm SDK ---------------------------------------- #
     def link_dataset(self, hf_slug: str, *, split: Optional[str] = None) -> None:
         self._inner.link_dataset(hf_slug, split=split)
@@ -141,7 +185,7 @@ class Run:
         self._inner.link_model(hf_repo, revision=revision)
 
     def __repr__(self) -> str:
-        return f"<trackio.Run id={self.id!r} name={self.name!r}>"
+        return f"<claude_monitor.Run id={self.id!r} name={self.name!r}>"
 
 
 class _DisabledRun:
@@ -165,6 +209,8 @@ class _DisabledRun:
     def finish(self, *_a: Any, **_k: Any) -> None: ...
     def link_dataset(self, *_a: Any, **_k: Any) -> None: ...
     def link_model(self, *_a: Any, **_k: Any) -> None: ...
+    def define_metric(self, name: str, **_k: Any) -> "_MetricDef":
+        return _MetricDef(name, {})
 
 
 # --------------------------------------------------------------------------- #
@@ -239,7 +285,7 @@ class _ConfigProxy:
         self._patch({name: value})
 
     def __repr__(self) -> str:
-        return f"<trackio.config {self.as_dict()!r}>"
+        return f"<claude_monitor.config {self.as_dict()!r}>"
 
 
 class _SummaryProxy:
@@ -461,7 +507,7 @@ def init(
 
 def log(values: Mapping[str, Any], step: Optional[int] = None, commit: bool = True, **_kw: Any) -> None:
     if _current is None:
-        raise ClaudeMonitorError("no active run — call trackio.init() first")
+        raise ClaudeMonitorError("no active run — call claude_monitor.wandb.init() first")
     _current.log(values, step=step, commit=commit)
 
 
@@ -473,6 +519,14 @@ def finish(exit_code: int = 0, quiet: Any = None) -> None:  # noqa: ARG001
     _current = None
     _config_proxy._bind(None)
     _summary_proxy._bind(None)
+
+
+def define_metric(name: str, **kwargs: Any) -> Any:
+    """Module-level ``wandb.define_metric`` — delegates to the active run, or
+    is a harmless no-op if no run is open yet."""
+    if _current is None:
+        return _MetricDef(name, {})
+    return _current.define_metric(name, **kwargs)
 
 
 # --------------------------------------------------------------------------- #
