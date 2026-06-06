@@ -20,9 +20,9 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Mapping, Optional
 
 # Library code follows the stdlib pattern: a single module-level logger per
-# file, namespaced under ``claude_monitor.<module>``. Users wire it up via
+# file, namespaced under ``tracehouse.<module>``. Users wire it up via
 # ``logging.basicConfig(level=logging.DEBUG)`` or ``logging.getLogger(
-# "claude_monitor").setLevel(logging.INFO)``. The SDK never calls
+# "tracehouse").setLevel(logging.INFO)``. The SDK never calls
 # ``basicConfig`` itself — that's the application's job.
 _log = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class ClaudeMonitorError(Exception):
 
 
 class ApiError(ClaudeMonitorError):
-    """Non-2xx response from the claude-monitor API."""
+    """Non-2xx response from the tracehouse API."""
 
     def __init__(self, status: int, message: str):
         super().__init__(f"{status}: {message}")
@@ -94,16 +94,16 @@ def _urllib_transport(
 def _resolve_api_base(api_base: Optional[str]) -> str:
     return (
         api_base
-        or os.environ.get("CLAUDE_MONITOR_API_BASE")
+        or os.environ.get("TRACEHOUSE_API_BASE")
         or "https://tracehouse.ai"
     ).rstrip("/")
 
 
 def _validate_api_key(api_key: Optional[str]) -> str:
-    key = api_key or os.environ.get("CLAUDE_MONITOR_API_KEY")
+    key = api_key or os.environ.get("TRACEHOUSE_API_KEY")
     if not key:
         raise ClaudeMonitorError(
-            "api_key is required (or set CLAUDE_MONITOR_API_KEY)"
+            "api_key is required (or set TRACEHOUSE_API_KEY)"
         )
     if not key.startswith("ba_"):
         raise ClaudeMonitorError(
@@ -139,7 +139,7 @@ class AuthContext:
 def _resolve_web_url(explicit: Optional[str], from_server: Optional[str]) -> str:
     return (
         explicit
-        or os.environ.get("CLAUDE_MONITOR_WEB_URL")
+        or os.environ.get("TRACEHOUSE_WEB_URL")
         or from_server
         or _DEFAULT_WEB_URL
     ).rstrip("/")
@@ -153,7 +153,7 @@ def _anon_cache_path(api_base: str) -> "Path":
     base = os.environ.get("XDG_CACHE_HOME") or os.path.join(
         os.path.expanduser("~"), ".cache"
     )
-    return Path(base) / "claude-monitor" / f"anon-{host}.json"
+    return Path(base) / "tracehouse" / f"anon-{host}.json"
 
 
 def _load_anon(api_base: str) -> Optional[dict[str, Any]]:
@@ -199,7 +199,7 @@ def _resolve_auth(
     allow_cache: bool = True,
 ) -> AuthContext:
     """Resolve a real key, or bootstrap an anonymous session when none is given."""
-    key = api_key or os.environ.get("CLAUDE_MONITOR_API_KEY")
+    key = api_key or os.environ.get("TRACEHOUSE_API_KEY")
     if key:
         if not key.startswith("ba_"):
             raise ClaudeMonitorError(
@@ -207,10 +207,10 @@ def _resolve_auth(
             )
         return AuthContext(token=key, is_anonymous=False)
 
-    if os.environ.get("CLAUDE_MONITOR_ANON", "1") == "0":
+    if os.environ.get("TRACEHOUSE_ANON", "1") == "0":
         raise ClaudeMonitorError(
-            "api_key is required (or set CLAUDE_MONITOR_API_KEY). "
-            "Unset CLAUDE_MONITOR_ANON to send anonymously instead."
+            "api_key is required (or set TRACEHOUSE_API_KEY). "
+            "Unset TRACEHOUSE_ANON to send anonymously instead."
         )
 
     if allow_cache:
@@ -248,7 +248,7 @@ def _warn_anonymous(view_url: str, claim_url: str) -> None:
     banner = (
         "\n"
         "============================================================\n"
-        " ⚠  claude-monitor: YOU ARE NOT LOGGED IN\n"
+        " ⚠  tracehouse: YOU ARE NOT LOGGED IN\n"
         "    Everything you send is PUBLIC — anyone with the link can read it.\n"
         f"    View / share      : {view_url}\n"
         f"    Log in to claim it: {claim_url}\n"

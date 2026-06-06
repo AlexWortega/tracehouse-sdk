@@ -1,4 +1,4 @@
-"""wandb-compat tests for claude_monitor.wandb against an in-memory transport."""
+"""wandb-compat tests for tracehouse.wandb against an in-memory transport."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from typing import Any, List, Mapping, Optional
 
 import pytest
 
-from claude_monitor import wandb
-from claude_monitor.client import HttpResponse
+from tracehouse import wandb
+from tracehouse.client import HttpResponse
 
 
 @dataclass
@@ -46,8 +46,8 @@ def transport(monkeypatch) -> FakeTransport:
     # trackio.init() builds a TrainingRun internally. Patch the default
     # transport so we don't hit network, and disable env/system probes that
     # would otherwise spawn a background thread + post an artifact.
-    from claude_monitor import client as cm_client
-    from claude_monitor import training as cm_training
+    from tracehouse import client as cm_client
+    from tracehouse import training as cm_training
 
     monkeypatch.setattr(cm_client, "_urllib_transport", t)
 
@@ -65,7 +65,7 @@ def transport(monkeypatch) -> FakeTransport:
 
 
 def test_init_returns_wandb_shaped_run(transport: FakeTransport, monkeypatch):
-    monkeypatch.setenv("CLAUDE_MONITOR_API_KEY", "ba_test")
+    monkeypatch.setenv("TRACEHOUSE_API_KEY", "ba_test")
     run = wandb.init(project="demo", name="exp", config={"lr": 1e-4})
 
     assert isinstance(run, wandb.Run)
@@ -81,7 +81,7 @@ def test_init_returns_wandb_shaped_run(transport: FakeTransport, monkeypatch):
 
 
 def test_log_dict_scalars(transport: FakeTransport, monkeypatch):
-    monkeypatch.setenv("CLAUDE_MONITOR_API_KEY", "ba_test")
+    monkeypatch.setenv("TRACEHOUSE_API_KEY", "ba_test")
     wandb.init(project="demo", name="x")
     wandb.log({"train/loss": 0.4, "eval/acc": 0.91}, step=10)
 
@@ -93,7 +93,7 @@ def test_log_dict_scalars(transport: FakeTransport, monkeypatch):
 
 
 def test_log_histogram_is_unwrapped(transport: FakeTransport, monkeypatch):
-    monkeypatch.setenv("CLAUDE_MONITOR_API_KEY", "ba_test")
+    monkeypatch.setenv("TRACEHOUSE_API_KEY", "ba_test")
     wandb.init(project="demo", name="x")
     h = wandb.Histogram([0.1, 0.2, 0.4, 0.7, 0.9], num_bins=4)
     wandb.log({"grad/norm": h})
@@ -106,7 +106,7 @@ def test_log_histogram_is_unwrapped(transport: FakeTransport, monkeypatch):
 
 
 def test_config_update_patches_run(transport: FakeTransport, monkeypatch):
-    monkeypatch.setenv("CLAUDE_MONITOR_API_KEY", "ba_test")
+    monkeypatch.setenv("TRACEHOUSE_API_KEY", "ba_test")
     wandb.init(project="demo", name="x")
 
     n_before = len(transport.calls)
@@ -121,7 +121,7 @@ def test_config_update_patches_run(transport: FakeTransport, monkeypatch):
 
 
 def test_config_attribute_set(transport: FakeTransport, monkeypatch):
-    monkeypatch.setenv("CLAUDE_MONITOR_API_KEY", "ba_test")
+    monkeypatch.setenv("TRACEHOUSE_API_KEY", "ba_test")
     wandb.init(project="demo", name="x", config={"lr": 1e-4})
 
     wandb.config.batch = 32
@@ -133,7 +133,7 @@ def test_config_attribute_set(transport: FakeTransport, monkeypatch):
 
 
 def test_summary_write_through_logs_metric(transport: FakeTransport, monkeypatch):
-    monkeypatch.setenv("CLAUDE_MONITOR_API_KEY", "ba_test")
+    monkeypatch.setenv("TRACEHOUSE_API_KEY", "ba_test")
     wandb.init(project="demo", name="x")
 
     wandb.summary["best_loss"] = 0.05
@@ -144,7 +144,7 @@ def test_summary_write_through_logs_metric(transport: FakeTransport, monkeypatch
 
 
 def test_finish_marks_finished(transport: FakeTransport, monkeypatch):
-    monkeypatch.setenv("CLAUDE_MONITOR_API_KEY", "ba_test")
+    monkeypatch.setenv("TRACEHOUSE_API_KEY", "ba_test")
     wandb.init(project="demo", name="x")
     wandb.finish()
     last = transport.calls[-1]
@@ -154,7 +154,7 @@ def test_finish_marks_finished(transport: FakeTransport, monkeypatch):
 
 
 def test_finish_with_exit_code_marks_failed(transport: FakeTransport, monkeypatch):
-    monkeypatch.setenv("CLAUDE_MONITOR_API_KEY", "ba_test")
+    monkeypatch.setenv("TRACEHOUSE_API_KEY", "ba_test")
     wandb.init(project="demo", name="x")
     wandb.finish(exit_code=1)
     last = transport.calls[-1]
@@ -162,7 +162,7 @@ def test_finish_with_exit_code_marks_failed(transport: FakeTransport, monkeypatc
 
 
 def test_disabled_mode_is_noop(transport: FakeTransport, monkeypatch):
-    monkeypatch.setenv("CLAUDE_MONITOR_API_KEY", "ba_test")
+    monkeypatch.setenv("TRACEHOUSE_API_KEY", "ba_test")
     n_before = len(transport.calls)
     r = wandb.init(project="demo", mode="disabled")
     wandb.log({"loss": 0.5}, step=1)
@@ -174,7 +174,7 @@ def test_disabled_mode_is_noop(transport: FakeTransport, monkeypatch):
 
 
 def test_unknown_init_kwargs_dont_crash(transport: FakeTransport, monkeypatch):
-    monkeypatch.setenv("CLAUDE_MONITOR_API_KEY", "ba_test")
+    monkeypatch.setenv("TRACEHOUSE_API_KEY", "ba_test")
     run = wandb.init(
         project="demo",
         name="x",

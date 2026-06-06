@@ -1,6 +1,6 @@
 """Module-level shim that holds an implicit ``Run`` for the wandb-style API.
 
-Library code should prefer ``claude_monitor.Run`` directly — globals don't
+Library code should prefer ``tracehouse.Run`` directly — globals don't
 play well with concurrent runs or with libraries that mustn't reach into
 their host process state.
 """
@@ -34,7 +34,7 @@ def init(**kwargs: Any) -> Run:
 
 def current() -> Run:
     if _current is None:
-        raise ClaudeMonitorError("no active run — call claude_monitor.init() first")
+        raise ClaudeMonitorError("no active run — call tracehouse.init() first")
     return _current
 
 
@@ -110,7 +110,7 @@ def init_run(**kwargs: Any) -> TrainingRun:
 def current_run() -> TrainingRun:
     if _current_run is None:
         raise ClaudeMonitorError(
-            "no active training run — call claude_monitor.init_run() first"
+            "no active training run — call tracehouse.init_run() first"
         )
     return _current_run
 

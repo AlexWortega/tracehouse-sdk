@@ -9,9 +9,9 @@ from typing import Any, List, Mapping, Optional
 
 import pytest
 
-import claude_monitor as cm
-from claude_monitor.client import ApiError, HttpResponse
-from claude_monitor.training import TrainingRun
+import tracehouse as cm
+from tracehouse.client import ApiError, HttpResponse
+from tracehouse.training import TrainingRun
 
 
 @dataclass
@@ -175,7 +175,7 @@ def test_context_manager_crashes_on_exception(transport: FakeTransport):
 
 def test_current_run_raises_without_init(monkeypatch):
     # Sanity: the module-level shim refuses without init_run.
-    import claude_monitor._global as g
+    import tracehouse._global as g
 
     monkeypatch.setattr(g, "_current_run", None)
     with pytest.raises(cm.ClaudeMonitorError):
@@ -183,7 +183,7 @@ def test_current_run_raises_without_init(monkeypatch):
 
 
 def test_module_level_init_run(transport: FakeTransport, monkeypatch):
-    import claude_monitor._global as g
+    import tracehouse._global as g
 
     monkeypatch.setattr(g, "_current_run", None)
     r = cm.init_run(api_key="ba_test", name="x", transport=transport, capture_env=False, system_metrics=False)
@@ -213,16 +213,16 @@ def test_api_key_must_start_with_ba(transport: FakeTransport):
 
 
 def test_anon_disabled_requires_key(monkeypatch, transport: FakeTransport):
-    monkeypatch.delenv("CLAUDE_MONITOR_API_KEY", raising=False)
-    monkeypatch.setenv("CLAUDE_MONITOR_ANON", "0")
+    monkeypatch.delenv("TRACEHOUSE_API_KEY", raising=False)
+    monkeypatch.setenv("TRACEHOUSE_ANON", "0")
     with pytest.raises(cm.ClaudeMonitorError):
         TrainingRun(name="demo", transport=transport, capture_env=False, system_metrics=False)
 
 
 def test_anonymous_run_bootstraps_and_uses_anon_bearer(monkeypatch, capsys):
-    monkeypatch.delenv("CLAUDE_MONITOR_API_KEY", raising=False)
-    monkeypatch.setenv("CLAUDE_MONITOR_WEB_URL", "https://web.example")
-    import claude_monitor.client as client
+    monkeypatch.delenv("TRACEHOUSE_API_KEY", raising=False)
+    monkeypatch.setenv("TRACEHOUSE_WEB_URL", "https://web.example")
+    import tracehouse.client as client
 
     client._anon_banner_shown = False
 
@@ -280,9 +280,9 @@ def test_rollout_defaults_to_auto_step(transport: FakeTransport):
 
 
 def test_anon_rollout_reuses_run_identity(monkeypatch):
-    monkeypatch.delenv("CLAUDE_MONITOR_API_KEY", raising=False)
-    monkeypatch.setenv("CLAUDE_MONITOR_WEB_URL", "https://web.example")
-    import claude_monitor.client as client
+    monkeypatch.delenv("TRACEHOUSE_API_KEY", raising=False)
+    monkeypatch.setenv("TRACEHOUSE_WEB_URL", "https://web.example")
+    import tracehouse.client as client
 
     client._anon_banner_shown = False
 

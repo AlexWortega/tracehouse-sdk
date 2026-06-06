@@ -9,8 +9,8 @@ from typing import Any, List, Mapping, Optional
 
 import pytest
 
-import claude_monitor as cm
-from claude_monitor.client import (
+import tracehouse as cm
+from tracehouse.client import (
     ApiError,
     HttpResponse,
     Run,
@@ -109,8 +109,8 @@ def test_finish_validates_outcome(transport: FakeTransport):
 
 
 def test_run_requires_api_key_when_anon_disabled(monkeypatch):
-    monkeypatch.delenv("CLAUDE_MONITOR_API_KEY", raising=False)
-    monkeypatch.setenv("CLAUDE_MONITOR_ANON", "0")
+    monkeypatch.delenv("TRACEHOUSE_API_KEY", raising=False)
+    monkeypatch.setenv("TRACEHOUSE_ANON", "0")
     with pytest.raises(cm.ClaudeMonitorError):
         Run(session_id="x")
 
@@ -121,9 +121,9 @@ def test_run_rejects_non_ba_key():
 
 
 def test_run_anonymous_bootstraps_session_and_warns(monkeypatch, capsys):
-    monkeypatch.delenv("CLAUDE_MONITOR_API_KEY", raising=False)
-    monkeypatch.setenv("CLAUDE_MONITOR_WEB_URL", "https://web.example")
-    import claude_monitor.client as client
+    monkeypatch.delenv("TRACEHOUSE_API_KEY", raising=False)
+    monkeypatch.setenv("TRACEHOUSE_WEB_URL", "https://web.example")
+    import tracehouse.client as client
 
     client._anon_banner_shown = False  # reset one-time banner guard
 

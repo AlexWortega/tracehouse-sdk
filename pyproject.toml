@@ -3,13 +3,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "claude-monitor-sdk"
+name = "tracehouse-sdk"
 version = "0.5.1"
-description = "claude-monitor SDK — push traces & spans to claude-monitor from Python, wandb-style."
+description = "tracehouse SDK — push traces & spans to tracehouse from Python, wandb-style."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "claude-monitor" }]
+authors = [{ name = "tracehouse" }]
 keywords = ["llm", "agents", "observability", "tracing", "claude"]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -29,10 +29,10 @@ Homepage = "https://github.com/AlexWortega/claude-monitor"
 Source = "https://github.com/AlexWortega/claude-monitor"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/claude_monitor"]
+packages = ["src/tracehouse"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/claude_monitor", "README.md", "LICENSE"]
+include = ["src/tracehouse", "README.md", "LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

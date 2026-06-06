@@ -8,7 +8,7 @@ or days. Conflating it with the chat-trace ``Run`` would force every
 
 Example::
 
-    import claude_monitor as cm
+    import tracehouse as cm
     run = cm.init_run(project="demo", name="qwen-sft",
                       config={"lr": 1e-4, "batch": 32})
     for step in range(1000):
@@ -397,7 +397,7 @@ class TrainingRun:
         """Push the auto-generated README.md to the linked HF model repo.
 
         Requires the user to have saved a write-scope ``hf_token`` in their
-        claude-monitor profile, and ``link_model`` to have been called.
+        tracehouse profile, and ``link_model`` to have been called.
         Returns ``{commit_url, commit_oid, repo}``.
         """
         if not self.run_id:

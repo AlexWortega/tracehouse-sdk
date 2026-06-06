@@ -1,19 +1,19 @@
-# claude-monitor (Python)
+# tracehouse (Python)
 
-Push traces and spans to [claude-monitor](https://github.com/AlexWortega/claude-monitor)
+Push traces and spans to [tracehouse](https://github.com/AlexWortega/claude-monitor)
 from any Python script — wandb-style, zero install dependencies.
 
 ```bash
-pip install claude-monitor
+pip install tracehouse
 ```
 
 ## Quickstart
 
 ```python
-import claude_monitor as cm
+import tracehouse as cm
 
 cm.init(
-    api_key="ba_…",          # or set CLAUDE_MONITOR_API_KEY
+    api_key="ba_…",          # or set TRACEHOUSE_API_KEY
     project="my-bot",
     session_id="run-001",    # idempotent: same id resumes the same trace
     task_name="demo task",
@@ -31,7 +31,7 @@ cm.finish(outcome="good", metadata={"k": "v"})
 ## Class-based / `with`
 
 ```python
-import claude_monitor as cm
+import tracehouse as cm
 
 with cm.Run(project="my-bot", session_id="run-002") as run:
     run.log_user("how do I install jq?")
@@ -53,8 +53,8 @@ with cm.Run(project="my-bot", session_id="run-002") as run:
 
 | Argument         | Env var                       | Default |
 |------------------|-------------------------------|---------|
-| `api_key`        | `CLAUDE_MONITOR_API_KEY`      | required |
-| `api_base`       | `CLAUDE_MONITOR_API_BASE`     | hosted Railway URL |
+| `api_key`        | `TRACEHOUSE_API_KEY`      | required |
+| `api_base`       | `TRACEHOUSE_API_BASE`     | hosted Railway URL |
 | `session_id`     | —                             | random `py-<uuid>` |
 | `project`        | —                             | `None` |
 | `scaffold`       | —                             | `"python-sdk"` |
@@ -74,7 +74,7 @@ Log a training run's **metrics** and its per-step **rollout conversations** toge
 shows up under the run's **Rollouts** tab (step → trace).
 
 ```python
-import claude_monitor as cm
+import tracehouse as cm
 
 run = cm.init_run(project="rl", name="ppo-v1", config={"lr": 1e-5})
 

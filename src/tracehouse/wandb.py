@@ -1,9 +1,9 @@
-"""claude_monitor.wandb — wandb-compatible API surface, hosted under our
+"""tracehouse.wandb — wandb-compatible API surface, hosted under our
 namespace (no separate package).
 
 Drop-in for the wandb call sites most user code actually uses::
 
-    from claude_monitor import wandb         # or: import claude_monitor.wandb as wandb
+    from tracehouse import wandb         # or: import tracehouse.wandb as wandb
 
     run = wandb.init(project="demo", name="qwen-sft",
                      config={"lr": 1e-4, "batch": 32})
@@ -15,10 +15,10 @@ Drop-in for the wandb call sites most user code actually uses::
     wandb.summary["best_loss"] = best_loss
     wandb.finish()
 
-What's wired through to the claude-monitor backend:
+What's wired through to the tracehouse backend:
   * init / log / finish / config / summary / run / Run / Histogram
   * Metric values land in the same /v1/runs/:id/metrics ingest path as
-    the native ``claude_monitor.init_run`` flow.
+    the native ``tracehouse.init_run`` flow.
 
 What's accepted-and-ignored for source compatibility (won't blow up your
 existing wandb code):
@@ -36,8 +36,8 @@ import os
 import sys
 from typing import Any, Iterable, Mapping, Optional
 
-from claude_monitor.client import ApiError, ClaudeMonitorError
-from claude_monitor.training import TrainingRun
+from tracehouse.client import ApiError, ClaudeMonitorError
+from tracehouse.training import TrainingRun
 
 __all__ = [
     # core
@@ -127,7 +127,7 @@ class Run:
     def url(self) -> str:
         """Best-effort link to /runs/<id> on the web frontend."""
         base = os.environ.get(
-            "CLAUDE_MONITOR_WEB_URL",
+            "TRACEHOUSE_WEB_URL",
             "https://tracehouse.ai",
         ).rstrip("/")
         return f"{base}/runs/{self.id}" if self.id else base
@@ -185,7 +185,7 @@ class Run:
         self._inner.link_model(hf_repo, revision=revision)
 
     def __repr__(self) -> str:
-        return f"<claude_monitor.Run id={self.id!r} name={self.name!r}>"
+        return f"<tracehouse.Run id={self.id!r} name={self.name!r}>"
 
 
 class _DisabledRun:
@@ -285,7 +285,7 @@ class _ConfigProxy:
         self._patch({name: value})
 
     def __repr__(self) -> str:
-        return f"<claude_monitor.config {self.as_dict()!r}>"
+        return f"<tracehouse.config {self.as_dict()!r}>"
 
 
 class _SummaryProxy:
@@ -330,7 +330,7 @@ def __getattr__(name: str) -> Any:
         return _config_proxy
     if name == "summary":
         return _summary_proxy
-    raise AttributeError(f"module 'claude_monitor.wandb' has no attribute {name!r}")
+    raise AttributeError(f"module 'tracehouse.wandb' has no attribute {name!r}")
 
 
 # --------------------------------------------------------------------------- #
@@ -385,7 +385,7 @@ class _MediaStub:
             "_type": self._type,
             "path": self.path,
             "caption": self.caption,
-            "note": "media hosting not yet implemented in claude-monitor",
+            "note": "media hosting not yet implemented in tracehouse",
         }
 
 
@@ -468,7 +468,7 @@ def init(
         return _current
 
     # Honor the env vars wandb users set in CI.
-    project = project or os.environ.get("WANDB_PROJECT") or os.environ.get("CLAUDE_MONITOR_PROJECT")
+    project = project or os.environ.get("WANDB_PROJECT") or os.environ.get("TRACEHOUSE_PROJECT")
     name = name or os.environ.get("WANDB_NAME")
     id_ = id or os.environ.get("WANDB_RUN_ID")
 
@@ -507,7 +507,7 @@ def init(
 
 def log(values: Mapping[str, Any], step: Optional[int] = None, commit: bool = True, **_kw: Any) -> None:
     if _current is None:
-        raise ClaudeMonitorError("no active run — call claude_monitor.wandb.init() first")
+        raise ClaudeMonitorError("no active run — call tracehouse.wandb.init() first")
     _current.log(values, step=step, commit=commit)
 
 
@@ -546,7 +546,7 @@ def unwatch(*_a: Any, **_kw: Any) -> None: ...
 
 
 def login(*_a: Any, **_kw: Any) -> bool:
-    """Always-true: claude-monitor auth uses env var / api_key argument."""
+    """Always-true: tracehouse auth uses env var / api_key argument."""
     return True
 
 

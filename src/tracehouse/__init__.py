@@ -1,4 +1,4 @@
-"""claude-monitor — push traces and spans from Python.
+"""tracehouse — push traces and spans from Python.
 
 Two surfaces:
 
@@ -14,7 +14,7 @@ and accept the same ``api_key`` / ``api_base`` / ``machine_id`` config.
 
 Example::
 
-    import claude_monitor as cm
+    import tracehouse as cm
 
     cm.init(project="my-bot", session_id="run-001")
     cm.log_user("hello")
@@ -26,21 +26,21 @@ Example::
 Logging
 -------
 
-The SDK uses ``logging.getLogger("claude_monitor")`` (and sub-loggers
-``claude_monitor.client`` / ``claude_monitor.training``). It does not call
+The SDK uses ``logging.getLogger("tracehouse")`` (and sub-loggers
+``tracehouse.client`` / ``tracehouse.training``). It does not call
 ``logging.basicConfig`` itself — that's the application's job. Typical
 setup::
 
     import logging
     logging.basicConfig(level=logging.INFO, format="%(name)s %(message)s")
-    logging.getLogger("claude_monitor").setLevel(logging.DEBUG)  # verbose HTTP
+    logging.getLogger("tracehouse").setLevel(logging.DEBUG)  # verbose HTTP
 
 INFO covers lifecycle events (run/trace created, finished, linked, pushed
 to HF, artifacts stored). DEBUG adds every HTTP request/response.
 WARNING fires for API errors and dropped metric points (NaN/Inf).
 """
 
-from . import wandb  # noqa: F401 — re-exported so `from claude_monitor import wandb` works
+from . import wandb  # noqa: F401 — re-exported so `from tracehouse import wandb` works
 from .client import (
     ApiError,
     ClaudeMonitorError,
