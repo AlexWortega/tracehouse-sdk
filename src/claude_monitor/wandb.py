@@ -128,7 +128,7 @@ class Run:
         """Best-effort link to /runs/<id> on the web frontend."""
         base = os.environ.get(
             "CLAUDE_MONITOR_WEB_URL",
-            "https://clewe.ai",
+            "https://tracehouse.ai",
         ).rstrip("/")
         return f"{base}/runs/{self.id}" if self.id else base
 
