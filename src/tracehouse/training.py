@@ -45,6 +45,7 @@ from .client import (
     _warn_anonymous,
 )
 from .system import SystemMonitor, capture_environment
+from .media import Image, Video
 
 ALLOWED_STATUSES = ("running", "finished", "failed", "crashed", "killed")
 ALLOWED_ARTIFACT_KINDS = ("json", "text", "params")
@@ -294,6 +295,11 @@ class TrainingRun:
             self._auto_step = max(self._auto_step, step + 1)
         wt = wall_time or _utcnow_iso()
         for key, value in values.items():
+            # Media objects (cm.Image / cm.Video) ship immediately to the media
+            # endpoint as raw bytes; scalars/lists buffer on the metric path.
+            if isinstance(value, (Image, Video)):
+                self._log_media(key, value, int(s))
+                continue
             self._buf.append(
                 {"key": key, "step": int(s), "value": value, "wall_time": wt}
             )
@@ -322,6 +328,66 @@ class TrainingRun:
             _log.debug(
                 "flushed %d metric point(s) (ingested=%d)", len(points), ingested
             )
+
+    # ----- media (images / videos) --------------------------------------- #
+
+    def _request_raw(self, path: str, raw: bytes, content_type: str) -> dict[str, Any]:
+        """POST raw bytes (no JSON wrapping) — used for media uploads."""
+        import json as _json
+
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "content-type": content_type,
+            "X-Claude-Monitor-Machine-Id": self.machine_id,
+        }
+        if self.hostname:
+            headers["X-Claude-Monitor-Hostname"] = self.hostname
+        if self.agent_version:
+            headers["X-Claude-Monitor-Agent-Version"] = self.agent_version
+        resp = self._transport("POST", f"{self._api_base}{path}", headers, raw)
+        if resp.status >= 400:
+            raise ClaudeMonitorError(
+                f"media upload failed: {resp.status} "
+                f"{resp.body.decode('utf-8', 'replace')[:200]}"
+            )
+        return _json.loads(resp.body) if resp.body else {}
+
+    def _log_media(self, key: str, media: Any, step: Optional[int] = None) -> dict[str, Any]:
+        if not self.run_id:
+            raise ClaudeMonitorError("run is not active")
+        import urllib.parse
+
+        qs: dict[str, str] = {"key": key, "media_type": media.media_type}
+        if step is not None:
+            qs["step"] = str(int(step))
+        if getattr(media, "caption", None):
+            qs["caption"] = str(media.caption)
+        path = f"/v1/runs/{self.run_id}/media?" + urllib.parse.urlencode(qs)
+        return self._request_raw(path, media.bytes, media.mime)
+
+    def log_image(
+        self,
+        key: str,
+        data: Any,
+        *,
+        caption: Optional[str] = None,
+        step: Optional[int] = None,
+        format: Optional[str] = None,
+    ) -> None:
+        """Log an image. ``data`` = file path, raw bytes, PIL Image, or numpy array."""
+        self._log_media(key, Image(data, caption=caption, format=format), step)
+
+    def log_video(
+        self,
+        key: str,
+        data: Any,
+        *,
+        caption: Optional[str] = None,
+        step: Optional[int] = None,
+        format: Optional[str] = None,
+    ) -> None:
+        """Log a video. ``data`` = file path or raw bytes (mp4 / webm / mov)."""
+        self._log_media(key, Video(data, caption=caption, format=format), step)
 
     # ----- linking + artifacts ------------------------------------------- #
 

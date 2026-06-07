@@ -48,6 +48,7 @@ from .client import (
     Span,
 )
 from .training import TrainingRun
+from .media import Image, Video
 from ._global import (
     init,
     log_user,
@@ -71,6 +72,8 @@ __all__ = [
     "Run",
     "Span",
     "TrainingRun",
+    "Image",
+    "Video",
     "wandb",
     "init",
     "log_user",
