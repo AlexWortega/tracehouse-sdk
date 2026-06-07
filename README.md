@@ -67,6 +67,25 @@ with cm.Run(project="my-bot", session_id="run-002") as run:
 Common attributes the UI surfaces directly: `text` (string), `result_text`
 (string), `tool_input` (object). Anything else lands in the raw JSON view.
 
+## Media — images & videos
+
+Log images and videos to a run with `cm.Image` / `cm.Video` — inside `run.log({…})`
+next to metrics, or via `run.log_image` / `run.log_video`. They appear under the run's
+**Media** tab, grouped by key. Bytes are sent raw (no base64), capped at **25 MB** each.
+
+```python
+import tracehouse as cm
+
+run = cm.init_run(project="demo", name="qwen-sft")
+
+# cm.Image accepts a file path, raw bytes, a PIL image, or a numpy array
+# (Pillow is only needed for arrays). cm.Video takes a path or bytes (mp4/webm/mov).
+run.log({"loss": loss, "samples": cm.Image("out/epoch3.png", caption="epoch 3")}, step=3)
+
+run.log_image("val/grid", "preview.png", caption="val grid", step=10)
+run.log_video("rollout", "clip.mp4", step=10)
+```
+
 ## RL: runs + rollout traces
 
 Log a training run's **metrics** and its per-step **rollout conversations** together.
