@@ -1,10 +1,10 @@
 # tracehouse (Python)
 
-Push traces and spans to [tracehouse](https://github.com/AlexWortega/claude-monitor)
+Push traces and spans to [tracehouse](https://github.com/AlexWortega/tracehouse-sdk)
 from any Python script — wandb-style, zero install dependencies.
 
 ```bash
-pip install tracehouse
+pip install tracehouse-sdk
 ```
 
 ## Quickstart
@@ -54,7 +54,7 @@ with cm.Run(project="my-bot", session_id="run-002") as run:
 | Argument         | Env var                       | Default |
 |------------------|-------------------------------|---------|
 | `api_key`        | `TRACEHOUSE_API_KEY`      | required |
-| `api_base`       | `TRACEHOUSE_API_BASE`     | hosted Railway URL |
+| `api_base`       | `TRACEHOUSE_API_BASE`     | https://tracehouse.ai |
 | `session_id`     | —                             | random `py-<uuid>` |
 | `project`        | —                             | `None` |
 | `scaffold`       | —                             | `"python-sdk"` |
