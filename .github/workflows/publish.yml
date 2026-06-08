@@ -27,8 +27,10 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-    # Must match the "Environment name" on the PyPI trusted publisher (pypi).
-    environment: pypi
+    # Must match the "Environment name" on the PyPI trusted publisher.
+    # NOTE: spelled "pipy" to match the publisher registered on PyPI; rename
+    # both sides to "pypi" together when convenient.
+    environment: pipy
     permissions:
       id-token: write # OIDC token for Trusted Publishing
     steps:
