@@ -21,11 +21,14 @@ Example::
 
 from __future__ import annotations
 
+import atexit as _atexit
 import datetime as _dt
 import logging
 import os
 import platform
+import sys as _sys
 import uuid
+import weakref as _weakref
 from typing import Any, Iterable, Mapping, Optional
 
 _log = logging.getLogger(__name__)
@@ -49,6 +52,47 @@ from .media import Image, Video
 
 ALLOWED_STATUSES = ("running", "finished", "failed", "crashed", "killed")
 ALLOWED_ARTIFACT_KINDS = ("json", "text", "params")
+
+
+# --- run lifecycle: auto-finish on process exit ---------------------------
+#
+# A run is "running" on the server until a terminal status is PATCHed. Without
+# this, any script that ends (or is killed / raises) without calling
+# ``run.finish()`` leaves the run "running" forever and they pile up. So, like
+# wandb, we finish open runs at interpreter exit: cleanly -> "finished", on an
+# uncaught exception -> "crashed". Tracked in a WeakSet; the hooks install once.
+# Opt out per-run with ``auto_finish=False`` or globally with
+# ``TRACEHOUSE_DISABLE_AUTOFINISH=1``.
+_active_runs: "_weakref.WeakSet[TrainingRun]" = _weakref.WeakSet()
+_lifecycle_installed = False
+_prev_excepthook: Any = None
+
+
+def _finish_active(status: str) -> None:
+    for run in list(_active_runs):
+        try:
+            if not run._closed:
+                run.finish(status=status)
+        except Exception:  # noqa: BLE001 — best-effort on the way out
+            pass
+
+
+def _autofinish_excepthook(exc_type: Any, exc: Any, tb: Any) -> None:
+    _finish_active("crashed")
+    if _prev_excepthook is not None:
+        _prev_excepthook(exc_type, exc, tb)
+
+
+def _install_lifecycle() -> None:
+    global _lifecycle_installed, _prev_excepthook
+    if _lifecycle_installed:
+        return
+    _lifecycle_installed = True
+    # excepthook runs first on an uncaught error (marks "crashed" + sets
+    # _closed), so the atexit pass then only finishes clean exits as "finished".
+    _atexit.register(_finish_active, "finished")
+    _prev_excepthook = _sys.excepthook
+    _sys.excepthook = _autofinish_excepthook
 
 
 class TrainingRun:
@@ -76,6 +120,7 @@ class TrainingRun:
         agent_version: Optional[str] = None,
         transport: Optional[Transport] = None,
         auto_create: bool = True,
+        auto_finish: bool = True,
         flush_threshold: int = 500,
         capture_env: bool = True,
         system_metrics: bool = True,
@@ -107,6 +152,9 @@ class TrainingRun:
 
         self.run_id: Optional[str] = None
         self._closed = False
+        self._auto_finish = auto_finish and not os.environ.get(
+            "TRACEHOUSE_DISABLE_AUTOFINISH"
+        )
         self._auto_step = 0
         self._buf: list[dict[str, Any]] = []
         self.flush_threshold = max(1, flush_threshold)
@@ -117,6 +165,9 @@ class TrainingRun:
 
         if auto_create:
             self._create_run()
+            if self._auto_finish and self.run_id:
+                _active_runs.add(self)
+                _install_lifecycle()
             if self._is_anonymous and self.run_id:
                 _warn_anonymous(
                     f"{self._web_url}/r/{self.run_id}?t={self._read_token}",
@@ -503,6 +554,7 @@ class TrainingRun:
                 {"status": status, "ended_at": _utcnow_iso()},
             )
             self._closed = True
+            _active_runs.discard(self)
             _log.info("run finished: id=%s status=%s", self.run_id, status)
 
     def __enter__(self) -> "TrainingRun":

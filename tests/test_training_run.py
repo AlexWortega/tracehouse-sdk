@@ -212,6 +212,60 @@ def test_api_key_must_start_with_ba(transport: FakeTransport):
         TrainingRun(api_key="not_valid", name="demo", transport=transport, capture_env=False, system_metrics=False)
 
 
+def test_atexit_finishes_unclosed_run(transport: FakeTransport):
+    import tracehouse.training as tr
+
+    run = TrainingRun(
+        api_key="ba_test", name="demo", transport=transport,
+        capture_env=False, system_metrics=False,
+    )
+    assert run in tr._active_runs
+    n_before = len(transport.calls)
+
+    # Simulate interpreter exit: the registered atexit hook finishes open runs.
+    tr._finish_active("finished")
+
+    assert run._closed
+    assert transport.calls[-1]["method"] == "PATCH"
+    assert transport.calls[-1]["body"]["status"] == "finished"
+    # A second exit pass is a no-op (already closed / discarded).
+    tr._finish_active("finished")
+    assert len(transport.calls) == n_before + 1
+
+
+def test_excepthook_marks_run_crashed(transport: FakeTransport):
+    import tracehouse.training as tr
+
+    run = TrainingRun(
+        api_key="ba_test", name="demo", transport=transport,
+        capture_env=False, system_metrics=False,
+    )
+    tr._autofinish_excepthook(RuntimeError, RuntimeError("boom"), None)
+    assert run._closed
+    assert transport.calls[-1]["body"]["status"] == "crashed"
+
+
+def test_explicit_finish_unregisters(transport: FakeTransport):
+    import tracehouse.training as tr
+
+    run = TrainingRun(
+        api_key="ba_test", name="demo", transport=transport,
+        capture_env=False, system_metrics=False,
+    )
+    run.finish(status="finished")
+    assert run not in tr._active_runs
+
+
+def test_auto_finish_opt_out(transport: FakeTransport):
+    import tracehouse.training as tr
+
+    run = TrainingRun(
+        api_key="ba_test", name="demo", transport=transport,
+        capture_env=False, system_metrics=False, auto_finish=False,
+    )
+    assert run not in tr._active_runs
+
+
 def test_anon_disabled_requires_key(monkeypatch, transport: FakeTransport):
     monkeypatch.delenv("TRACEHOUSE_API_KEY", raising=False)
     monkeypatch.setenv("TRACEHOUSE_ANON", "0")
