@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "tracehouse-sdk"
-version = "0.5.1"
+version = "0.6.0"
 description = "tracehouse SDK — push traces & spans to tracehouse from Python, wandb-style."
 readme = "README.md"
 requires-python = ">=3.9"
